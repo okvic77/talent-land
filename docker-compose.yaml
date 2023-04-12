@@ -1,0 +1,67 @@
+version: "3"
+
+x-wordpress-env:
+  &default-env # ALLOW_EMPTY_PASSWORD is recommended only for development.
+  ALLOW_EMPTY_PASSWORD: yes
+  WORDPRESS_DB_HOST: mariadb
+  # WORDPRESS_DATABASE_PORT_NUMBER: 3306
+  WORDPRESS_DB_PASSWORD: password
+  WORDPRESS_DB_USER: bn_wordpress
+  WORDPRESS_DB_NAME: databasename
+  WORDPRESS_CONFIG_EXTRA: |
+    $$_SERVER['HTTP_HOST'] = $$_SERVER['HTTP_X_FORWARDED_HOST'] ?? $$_SERVER['HTTP_HOST'] ?? "localhost";
+    $$protocol = stripos($$_SERVER['HTTP_X_FORWARDED_PROTO'] ?? $$_SERVER['SERVER_PROTOCOL'],'https') === 0 ? 'https://' : 'http://';
+    if ($$protocol == "https://") {
+      $$_SERVER['HTTPS'] = 'on';
+    }
+    define('WP_SITEURL', $$protocol . $$_SERVER['HTTP_HOST']);
+    define('WP_HOME', $$protocol . $$_SERVER['HTTP_HOST']);
+    define('FORCE_SSL_LOGIN',false);
+    define('FORCE_SSL_ADMIN',false);
+    define('WP_DEBUG', true);
+    define('WP_CACHE',false);
+
+services:
+  mariadb:
+    image: mariadb:10.7
+    volumes:
+      - "mariadb_data:/var/lib/mysql"
+      - ./backup:/media
+    environment:
+      # ALLOW_EMPTY_PASSWORD is recommended only for development.
+      # - ALLOW_EMPTY_PASSWORD=yes
+      - MARIADB_USER=bn_wordpress
+      - MARIADB_ROOT_PASSWORD=passwordroot
+      - MARIADB_PASSWORD=password
+      - MARIADB_DATABASE=databasename
+    ports:
+      - "3306:3306"
+  wordpress:
+    image: wordpress:6.1.1-apache
+    # build: .
+    ports:
+      - "80:80"
+      # - "443:443"
+    volumes:
+      # - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+      - ./backup/wp-content:/var/www/html/wp-content:rw
+      # - ./theme/:/var/www/html/wp-content/themes/theme:rw
+    depends_on:
+      - mariadb
+    environment: *default-env
+
+  wpcli:
+    deploy:
+      replicas: 0
+    image: wordpress:cli
+    volumes_from:
+      - wordpress
+    links:
+      - mariadb
+    # entrypoint: wp
+    command: "--info"
+    environment: *default-env
+
+volumes:
+  mariadb_data: { driver: local }
+  media: { driver: local }
